@@ -1,48 +1,52 @@
 package handler
 
 import (
-	"context"
-
-	log "github.com/micro/micro/v3/service/logger"
-
-	user "user/proto"
+	context "context"
+	"github.com/wangjiandev/user/domain/model"
+	"github.com/wangjiandev/user/domain/service"
+	pb "github.com/wangjiandev/user/proto/user"
 )
 
-type User struct{}
+type User struct {
+	UserService service.IUserService
+}
 
-// Call is a single request handler called via client.Call or the generated client code
-func (e *User) Call(ctx context.Context, req *user.Request, rsp *user.Response) error {
-	log.Info("Received User.Call request")
-	rsp.Msg = "Hello " + req.Name
+func (u *User) Register(ctx context.Context, request *pb.UserRegisterRequest, response *pb.UserRegisterResponse) error {
+	user := &model.User{
+		UserName:     request.UserName,
+		FirstName:    request.FirstName,
+		HashPassword: request.Pwd,
+	}
+	_, err := u.UserService.AddUser(user)
+	if err != nil {
+		return err
+	}
+	response.Message = "注册成功"
 	return nil
 }
 
-// Stream is a server side stream handler called via client.Stream or the generated client code
-func (e *User) Stream(ctx context.Context, req *user.StreamingRequest, stream user.User_StreamStream) error {
-	log.Infof("Received User.Stream request with count: %d", req.Count)
-
-	for i := 0; i < int(req.Count); i++ {
-		log.Infof("Responding: %d", i)
-		if err := stream.Send(&user.StreamingResponse{
-			Count: int64(i),
-		}); err != nil {
-			return err
-		}
+func (u *User) Login(ctx context.Context, request *pb.UserLoginRequest, response *pb.UserLoginResponse) error {
+	isOk, err := u.UserService.CheckPwd(request.UserName, request.Pwd)
+	if err != nil {
+		return err
 	}
-
+	response.IsSuccess = isOk
 	return nil
 }
 
-// PingPong is a bidirectional stream handler called via client.Stream or the generated client code
-func (e *User) PingPong(ctx context.Context, stream user.User_PingPongStream) error {
-	for {
-		req, err := stream.Recv()
-		if err != nil {
-			return err
-		}
-		log.Infof("Got ping %v", req.Stroke)
-		if err := stream.Send(&user.Pong{Stroke: req.Stroke}); err != nil {
-			return err
-		}
+func (u *User) GetUserInfo(ctx context.Context, request *pb.UserInfoRequest, response *pb.UserInfoResponse) error {
+	user, err := u.UserService.FindUserByName(request.UserName)
+	if err != nil {
+		return err
 	}
+	response = UserForResponse(user)
+	return nil
+}
+
+func UserForResponse(user *model.User) *pb.UserInfoResponse {
+	response := &pb.UserInfoResponse{}
+	response.UserId = user.ID
+	response.UserName = user.UserName
+	response.FirstName = user.FirstName
+	return response
 }
